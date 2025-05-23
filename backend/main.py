@@ -6,20 +6,34 @@ import numpy as np
 from io import BytesIO
 import mysql.connector
 from datetime import datetime
+import os
+from dotenv import load_dotenv
 
-# --- Configs ---
+# --- Carregar variáveis do .env ---
+load_dotenv()
+
+# --- Verificação de variáveis obrigatórias ---
+required_vars = [
+    "MINIO_ENDPOINT", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY", "MINIO_BUCKET",
+    "DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME"
+]
+for var in required_vars:
+    if not os.getenv(var):
+        raise EnvironmentError(f"Variável de ambiente {var} não está definida.")
+
+# --- Configurações ---
 app = Flask(__name__)
-MINIO_ENDPOINT = "localhost:9000"
-MINIO_ACCESS_KEY = "minioadmin"
-MINIO_SECRET_KEY = "minioadmin"
-MINIO_BUCKET = "imagens"
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT")
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
+MINIO_BUCKET = os.getenv("MINIO_BUCKET")
 
-# --- Banco de Dados ---
+# --- Configuração do Banco de Dados ---
 db_config = {
-    "host": "localhost",
-    "user": "seu_usuario",
-    "password": "sua_senha",
-    "database": "imagedb"
+    "host": os.getenv("DB_HOST"),
+    "user": os.getenv("DB_USER"),
+    "password": os.getenv("DB_PASSWORD"),
+    "database": os.getenv("DB_NAME")
 }
 
 # --- Cliente MinIO ---
@@ -30,7 +44,7 @@ s3_client = boto3.client(
     aws_secret_access_key=MINIO_SECRET_KEY,
 )
 
-# Cria bucket se não existir
+# Criar bucket se não existir
 try:
     s3_client.head_bucket(Bucket=MINIO_BUCKET)
 except:
@@ -49,6 +63,7 @@ def processar_imagem():
     npimg = np.frombuffer(file.read(), np.uint8)
     image = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
 
+    # OCR com EasyOCR
     resultados = ocr_reader.readtext(image)
     textos_concat = " | ".join([r[1] for r in resultados])
 
@@ -58,7 +73,7 @@ def processar_imagem():
     s3_client.upload_fileobj(img_bytes, MINIO_BUCKET, filename)
     url_minio = f"http://{MINIO_ENDPOINT}/{MINIO_BUCKET}/{filename}"
 
-    # Salva no MySQL
+    # Salvar dados no banco MySQL
     try:
         conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor()
@@ -80,4 +95,4 @@ def processar_imagem():
     })
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)
