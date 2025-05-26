@@ -33,7 +33,7 @@ s3_client = boto3.client(
     aws_secret_access_key=MINIO_SECRET_KEY,
 )
 
-yolo_model = YOLO("best1.pt")
+yolo_model = YOLO("/Users/diegoantunescosta/Documents/synapse/backend/best1.pt")
 ocr_reader = easyocr.Reader(['pt', 'en'])
 
 @app.route("/processar", methods=["POST"])
@@ -68,6 +68,27 @@ def processar_imagem():
         placa_text = ocr_result[0][1].replace(" ", "").upper()
 
         if not placa_text:
+            continue
+
+        # Salvar a imagem no MinIO
+        try:
+            # Converter a imagem para bytes
+            _, buffer = cv2.imencode('.jpg', recorte)
+            image_bytes = BytesIO(buffer).getvalue()
+            
+            # Gerar um nome único para o arquivo
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f"{placa_text}_{timestamp}.jpg"
+            
+            # Upload para o MinIO
+            s3_client.put_object(
+                Bucket=MINIO_BUCKET,
+                Key=filename,
+                Body=image_bytes,
+                ContentType='image/jpeg'
+            )
+        except Exception as e:
+            print(f"Erro ao salvar imagem no MinIO: {e}")
             continue
 
         # Salvar a placa no banco com dados padrão para os campos NOT NULL
